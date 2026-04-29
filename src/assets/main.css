@@ -1,0 +1,46 @@
+@import "./base.css";
+
+/* 
+  全局重置：确保 html 和 body 占满全屏，无默认边距 
+  这对于 fixed 定位的背景图和 sticky 导航栏至关重要
+*/
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden; /* 防止水平滚动条 */
+}
+
+/* 
+  #app 作为根容器，应该占满全屏，不要限制宽度或添加 padding 
+  让内部组件自己控制布局
+*/
+#app {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  font-weight: normal;
+  /* 移除之前的 max-width, grid, flex 等限制 */
+}
+
+/* 
+  全局链接样式优化 
+  如果你希望博客内的链接保持自定义颜色，可以保留此部分，
+  或者根据需求修改颜色为白色/主题色
+*/
+a {
+  text-decoration: none;
+  color: inherit; /* 继承父元素颜色，避免强制绿色干扰深色背景 */
+  transition: color 0.3s;
+}
+
+a:hover {
+  opacity: 0.8;
+}
+
+/* 
+  移除原有的 @media (min-width: 1024px) 块 
+  因为其中的 body flex 居中和 grid 布局会破坏全屏应用的结构
+*/
