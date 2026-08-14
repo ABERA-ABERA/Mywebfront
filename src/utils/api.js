@@ -1,0 +1,459 @@
+/**
+ * API 工具函数 - 复用原始接口，后端不可用时 fallback 到 mock 数据
+ * 后端: Spring Boot + MySQL, 端口 8090
+ */
+import { mockArticles, mockUsers, mockComments, mockCommentsExtended, mockHotTopics, mockTags, mockNotifications, mockTradeItems, mockErrandTasks, mockTradeCategories, mockErrandCategories, mockConversations, mockMessages } from './mockData'
+
+/**
+ * 获取 token
+ */
+const getToken = () => localStorage.getItem('token') || ''
+
+/**
+ * 通用 fetch 封装，带 fallback
+ */
+const fetchWithFallback = async (url, options = {}, mockFallback = null) => {
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        'token': getToken(),
+        ...options.headers
+      }
+    })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const result = await response.json()
+    if (result.code === 1 || result.code === 200) {
+      return { success: true, data: result.data, msg: result.msg }
+    }
+    throw new Error(result.msg || '请求失败')
+  } catch (error) {
+    console.warn(`接口 ${url} 不可用，使用 mock 数据:`, error.message)
+    if (mockFallback) {
+      return { success: false, data: mockFallback, msg: 'mock' }
+    }
+    return { success: false, data: null, msg: error.message }
+  }
+}
+
+/**
+ * 获取用户信息
+ * 原始接口: GET /admin/user/info
+ */
+export const fetchUserInfo = async () => {
+  return fetchWithFallback('/admin/user/info', { method: 'GET' }, {
+    id: 1,
+    username: 'Mock用户',
+    name: 'Mock用户',
+    email: 'mock@zhihu.com',
+    avatar: 'https://mywebpro.oss-cn-beijing.aliyuncs.com/ac052700-4c99-48a0-8e11-57d95c025220.jpg',
+    bio: '这个人很懒，什么都没有留下~',
+    location: '北京',
+    createTime: [2024, 1, 10],
+    followers: 128,
+    following: 56,
+    articles: 12
+  })
+}
+
+/**
+ * 获取文章列表
+ * 原始接口: GET /admin/article/list
+ */
+export const fetchArticleList = async () => {
+  return fetchWithFallback('/admin/article/list', { method: 'GET' }, mockArticles)
+}
+
+/**
+ * 获取文章详情
+ * 接口: GET /admin/article/{id}
+ */
+export const fetchArticleDetail = async (id) => {
+  return fetchWithFallback(`/admin/article/${id}`, { method: 'GET' }, null)
+}
+
+/**
+ * 发布文章
+ * 原始接口: POST /admin/article/add
+ */
+export const fetchAddArticle = async (payload) => {
+  return fetchWithFallback('/admin/article/add', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }, { id: Date.now(), ...payload })
+}
+
+/**
+ * 修改文章
+ * 原始接口: POST /admin/article/update
+ */
+export const fetchUpdateArticle = async (payload) => {
+  return fetchWithFallback('/admin/article/update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+}
+
+/**
+ * 删除文章
+ * 原始接口: DELETE /admin/article/delete/{id}
+ */
+export const fetchDeleteArticle = async (id) => {
+  return fetchWithFallback(`/admin/article/delete/${id}`, {
+    method: 'DELETE'
+  })
+}
+
+/**
+ * 修改用户信息
+ * 原始接口: POST /admin/user/change
+ */
+export const fetchUpdateUser = async (payload) => {
+  return fetchWithFallback('/admin/user/change', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+}
+
+/**
+ * 上传文件
+ * 原始接口: POST /admin/upload
+ */
+export const fetchUpload = async (file) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return fetchWithFallback('/admin/upload', {
+    method: 'POST',
+    body: formData
+  })
+}
+
+/**
+ * 点赞/取消点赞文章
+ * 预留接口: POST /admin/article/like
+ */
+export const fetchLikeArticle = async (articleId) => {
+  return fetchWithFallback('/admin/article/like', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ articleId })
+  })
+}
+
+/**
+ * 增加文章浏览量
+ * 预留接口: POST /admin/article/view
+ */
+export const fetchViewArticle = async (articleId) => {
+  return fetchWithFallback('/admin/article/view', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ articleId })
+  })
+}
+
+/**
+ * 获取文章评论列表
+ * 接口: GET /admin/article/comment/{articleId}
+ * 后端返回: { data: { list: [...], total, page, pageSize } }
+ */
+export const fetchArticleComments = async (articleId) => {
+  const id = parseInt(articleId)
+  const result = await fetchWithFallback(`/admin/article/comment/${articleId}`, { method: 'GET' }, 
+    (() => {
+      const allComments = [...mockComments, ...mockCommentsExtended]
+      return allComments.filter(c => c.articleId === id)
+    })()
+  )
+  // 后端返回分页格式 { list, total, page, pageSize }，提取 list
+  if (result.data && !Array.isArray(result.data) && Array.isArray(result.data.list)) {
+    result.data = result.data.list
+  }
+  return result
+}
+
+/**
+ * 发表评论（支持图片）
+ * 接口: POST /admin/article/comment
+ */
+export const fetchAddComment = async (payload) => {
+  return fetchWithFallback('/admin/article/comment', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }, { id: Date.now(), ...payload })
+}
+
+/**
+ * 关注/取消关注用户
+ * 预留接口: POST /admin/user/follow
+ */
+export const fetchFollowUser = async (userId) => {
+  return fetchWithFallback('/admin/user/follow', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId })
+  })
+}
+
+/**
+ * 获取关注列表
+ * 预留接口: GET /admin/user/following
+ */
+export const fetchFollowingList = async () => {
+  return fetchWithFallback('/admin/user/following', { method: 'GET' }, [])
+}
+
+/**
+ * 获取热榜（按浏览量排名）
+ * 接口: GET /admin/article/hot
+ * 如果后端无此接口，使用文章列表按浏览量排序
+ */
+export const fetchHotArticles = async () => {
+  const result = await fetchWithFallback('/admin/article/hot', { method: 'GET' }, null)
+  // 如果热榜接口失败，用文章列表排序代替
+  if (!result.success || !result.data) {
+    const listResult = await fetchArticleList()
+    const list = Array.isArray(listResult.data) ? listResult.data : []
+    return { success: true, data: list.sort((a, b) => (b.views || 0) - (a.views || 0)).slice(0, 10) }
+  }
+  return result
+}
+
+/**
+ * 搜索文章
+ * 接口: GET /admin/search?q=xxx&type=articles
+ */
+export const fetchSearchArticles = async (keyword) => {
+  const result = await fetchWithFallback(`/admin/search?q=${encodeURIComponent(keyword)}&type=articles`, { method: 'GET' }, null)
+  // 搜索接口返回格式: { data: { articles: [...] } } 或 { data: [...] }
+  if (result.success && result.data) {
+    if (Array.isArray(result.data)) return result
+    if (Array.isArray(result.data.articles)) return { success: true, data: result.data.articles }
+    if (Array.isArray(result.data.list)) return { success: true, data: result.data.list }
+  }
+  // 如果搜索接口失败，用文章列表本地过滤
+  const listResult = await fetchArticleList()
+  let list = listResult.data || []
+  if (!Array.isArray(list) && Array.isArray(list.list)) list = list.list
+  if (!Array.isArray(list)) list = []
+  const q = keyword.toLowerCase()
+  const filtered = list.filter(a =>
+    (a.title || '').toLowerCase().includes(q) ||
+    (a.content || '').toLowerCase().includes(q)
+  )
+  return { success: true, data: filtered }
+}
+
+/**
+ * 搜索用户
+ * 接口: GET /admin/user/search?keyword=xxx
+ */
+export const fetchSearchUsers = async (keyword) => {
+  return fetchWithFallback(`/admin/user/search?keyword=${encodeURIComponent(keyword)}`, { method: 'GET' }, [])
+}
+
+/**
+ * 获取随机文章（发现模块）
+ * 预留接口: GET /admin/article/random
+ */
+export const fetchRandomArticles = async () => {
+  return fetchWithFallback('/admin/article/random', { method: 'GET' }, 
+    [...mockArticles].sort(() => Math.random() - 0.5)
+  )
+}
+
+/**
+ * 获取用户点赞过的文章
+ * 接口: GET /admin/user/like/{userId}
+ * 后端直接返回文章列表数组
+ */
+export const fetchLikedArticles = async (userId) => {
+  return fetchWithFallback(`/admin/user/like/${userId}`, { method: 'GET' }, [])
+}
+
+/**
+ * 获取粉丝列表
+ * 预留接口: GET /admin/user/followers
+ */
+export const fetchFollowers = async () => {
+  return fetchWithFallback('/admin/user/followers', { method: 'GET' }, [])
+}
+
+/**
+ * 收藏/取消收藏文章
+ * 预留接口: POST /admin/article/collect
+ */
+export const fetchCollectArticle = async (articleId) => {
+  return fetchWithFallback('/admin/article/collect', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ articleId })
+  })
+}
+
+/**
+ * 保存草稿
+ * 预留接口: POST /admin/article/draft
+ */
+export const fetchSaveDraft = async (payload) => {
+  return fetchWithFallback('/admin/article/draft', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+}
+
+/**
+ * 加载草稿
+ * 预留接口: GET /admin/article/draft
+ */
+export const fetchLoadDraft = async () => {
+  return fetchWithFallback('/admin/article/draft', { method: 'GET' }, null)
+}
+
+/**
+ * 获取评论列表（本地 mock）
+ */
+export const fetchCommentsByArticleId = (articleId) => {
+  const allComments = [...mockComments, ...mockCommentsExtended]
+  return allComments.filter(c => c.articleId === articleId)
+}
+
+/**
+ * 获取热榜数据（mock）
+ */
+export const fetchHotTopics = () => mockHotTopics
+
+/**
+ * 获取标签数据（mock）
+ */
+export const fetchTags = () => mockTags
+
+/**
+ * 获取通知数据（mock）
+ */
+export const fetchNotifications = () => mockNotifications
+
+/**
+ * 获取推荐用户（mock）
+ */
+export const fetchRecommendUsers = () => mockUsers
+
+/**
+ * 获取二手商品列表
+ * 预留接口: GET /admin/trade/item/list
+ */
+export const fetchTradeItemList = async (category) => {
+  const url = category ? `/admin/trade/item/list?category=${category}` : '/admin/trade/item/list'
+  return fetchWithFallback(url, { method: 'GET' }, mockTradeItems)
+}
+
+/**
+ * 获取商品详情
+ * 预留接口: GET /admin/trade/item/{id}
+ */
+export const fetchTradeItemDetail = async (id) => {
+  return fetchWithFallback(`/admin/trade/item/${id}`, { method: 'GET' }, mockTradeItems.find(i => i.id === parseInt(id)))
+}
+
+/**
+ * 发布二手商品
+ * 预留接口: POST /admin/trade/item/add
+ */
+export const fetchAddTradeItem = async (payload) => {
+  return fetchWithFallback('/admin/trade/item/add', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }, { id: Date.now(), ...payload })
+}
+
+/**
+ * 获取跑腿任务列表
+ * 预留接口: GET /admin/errand/task/list
+ */
+export const fetchErrandTaskList = async (category) => {
+  const url = category ? `/admin/errand/task/list?category=${category}` : '/admin/errand/task/list'
+  return fetchWithFallback(url, { method: 'GET' }, mockErrandTasks)
+}
+
+/**
+ * 获取跑腿任务详情
+ * 预留接口: GET /admin/errand/task/{id}
+ */
+export const fetchErrandTaskDetail = async (id) => {
+  return fetchWithFallback(`/admin/errand/task/${id}`, { method: 'GET' }, mockErrandTasks.find(t => t.id === parseInt(id)))
+}
+
+/**
+ * 接单跑腿任务
+ * 预留接口: POST /admin/errand/task/accept
+ */
+export const fetchAcceptErrandTask = async (taskId) => {
+  return fetchWithFallback('/admin/errand/task/accept', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taskId })
+  })
+}
+
+/**
+ * 发布跑腿任务
+ * 预留接口: POST /admin/errand/task/add
+ */
+export const fetchAddErrandTask = async (payload) => {
+  return fetchWithFallback('/admin/errand/task/add', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }, { id: Date.now(), ...payload })
+}
+
+/**
+ * 获取交易分类列表
+ */
+export const fetchTradeCategories = () => mockTradeCategories
+
+/**
+ * 获取跑腿分类列表
+ */
+export const fetchErrandCategories = () => mockErrandCategories
+
+/**
+ * 获取私信会话列表
+ * 预留接口: GET /admin/message/conversations
+ */
+export const fetchConversations = async () => {
+  return fetchWithFallback('/admin/message/conversations', { method: 'GET' }, mockConversations)
+}
+
+/**
+ * 获取私信消息记录
+ * 预留接口: GET /admin/message/history/{conversationId}
+ */
+export const fetchMessageHistory = async (conversationId) => {
+  return fetchWithFallback(`/admin/message/history/${conversationId}`, { method: 'GET' }, mockMessages[conversationId] || [])
+}
+
+/**
+ * 发送私信
+ * 预留接口: POST /admin/message/send
+ */
+export const fetchSendMessage = async (payload) => {
+  return fetchWithFallback('/admin/message/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }, { id: Date.now(), ...payload })
+}
+
+/**
+ * 获取未读消息总数
+ */
+export const fetchUnreadMessageCount = () => {
+  return mockConversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0)
+}
