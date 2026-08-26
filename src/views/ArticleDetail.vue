@@ -71,7 +71,7 @@
                 <svg class="action-icon" viewBox="0 0 24 24" :fill="isLiked ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
                   <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
                 </svg>
-                <span>{{ isLiked ? '已赞' : '点赞' }} {{ article.likes || 0 }}</span>
+                <span>{{ isLiked ? '已赞' : '点赞' }} {{ article.likes ?? 0 }}</span>
               </button>
               <button class="action-btn" :class="{ active: isCollected }" @click="toggleCollect">
                 <svg class="action-icon" viewBox="0 0 24 24" :fill="isCollected ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
@@ -90,7 +90,7 @@
                 <svg class="stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
                 </svg>
-                {{ article.views || 0 }}
+                {{ article.views ?? 0 }}
               </span>
               <span class="action-stat">
                 <svg class="stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -295,19 +295,46 @@ const relatedArticles = computed(() => {
   return allArticles.value.filter(a => a.id !== article.value.id).slice(0, 5)
 })
 
-// 点赞
+// 点赞 - 立即 ±1 + 图标变色 + 后端同步
 const toggleLike = async () => {
-  isLiked.value = !isLiked.value
-  article.value.likes += isLiked.value ? 1 : -1
-  await fetchLikeArticle(article.value.id)
-  ElMessage.success(isLiked.value ? '已点赞' : '取消点赞')
+  const wasLiked = isLiked.value
+  const newLiked = !wasLiked
+  // 立即更新：图标变色 + 数字 ±1
+  isLiked.value = newLiked
+  article.value.likes = Math.max(0, article.value.likes + (newLiked ? 1 : -1))
+  try {
+    await fetchLikeArticle(article.value.id, newLiked ? 'like' : 'unlike')
+    // 后端返回后用真实值覆盖
+    const detail = await fetchArticleDetail(article.value.id)
+    if (detail.success && detail.data) {
+      article.value.likes = Math.max(0, detail.data.likes ?? 0)
+      article.value.views = Math.max(0, detail.data.views ?? article.value.views)
+    }
+    ElMessage.success(newLiked ? '已点赞' : '取消点赞')
+  } catch (e) {
+    console.error('点赞失败:', e)
+    // 失败时回滚
+    isLiked.value = wasLiked
+    article.value.likes = Math.max(0, article.value.likes + (newLiked ? -1 : 1))
+  }
 }
 
-// 收藏
+// 收藏 - 图标立即切换 + 后端同步
 const toggleCollect = async () => {
-  isCollected.value = !isCollected.value
-  await fetchCollectArticle(article.value.id)
-  ElMessage.success(isCollected.value ? '已收藏' : '取消收藏')
+  const wasCollected = isCollected.value
+  isCollected.value = !wasCollected
+  try {
+    await fetchCollectArticle(article.value.id)
+    const detail = await fetchArticleDetail(article.value.id)
+    if (detail.success && detail.data) {
+      article.value.likes = Math.max(0, detail.data.likes ?? article.value.likes)
+      article.value.views = Math.max(0, detail.data.views ?? article.value.views)
+    }
+    ElMessage.success(isCollected.value ? '已收藏' : '取消收藏')
+  } catch (e) {
+    console.error('收藏失败:', e)
+    isCollected.value = wasCollected
+  }
 }
 
 // 分享文章
@@ -535,15 +562,15 @@ onMounted(async () => {
       images: found.images || [],
       videos: found.videos || [],
       tags: found.tags || [],
-      likes: found.likes || 0,
-      comments: found.comments || 0,
-      views: found.views || 0,
+      likes: found.likes ?? 0,
+      comments: found.comments ?? found.commentCount ?? 0,
+      views: Math.max(0, found.views ?? 0),
       createTime: dateStr,
       isLiked: found.isLiked || false,
       isFollowed: found.isFollowed || false
     }
-    isLiked.value = article.value.isLiked
-    isFollowed.value = article.value.isFollowed
+    isLiked.value = !!article.value.isLiked
+    isFollowed.value = !!article.value.isFollowed
     
     // 增加浏览量并使用后端返回的真实值
     const viewResult = await fetchViewArticle(articleId)

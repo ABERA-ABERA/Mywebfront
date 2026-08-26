@@ -406,7 +406,7 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElImageViewer, ElMessageBox } from 'element-plus'
-import { fetchFollowingList, fetchFollowers, fetchLikedArticles, fetchFollowUser, fetchArticleList } from '@/utils/api'
+import { fetchFollowingList, fetchFollowers, fetchLikedArticles, fetchFollowUser, fetchArticleList, fetchUserInfo as fetchUserInfoApi } from '@/utils/api'
 
 const router = useRouter()
 const route = useRoute()
@@ -643,10 +643,8 @@ const formatArticleTime = (article) => {
 // --- API Methods ---
 const fetchUserInfo = async () => {
   try {
-    const response = await fetch('/admin/user/info', { method: 'GET', headers: { 'token': localStorage.getItem('token') || '' } })
-    if (!response.ok) throw new Error('获取用户信息失败')
-    const result = await response.json()
-    if (result.code === 1 && result.data) {
+    const result = await fetchUserInfoApi()
+    if (result.success && result.data) {
       const data = result.data
       // 设置当前用户ID（用于加载喜欢的文章等）
       if (!currentUserId.value && data.id) {
@@ -663,6 +661,8 @@ const fetchUserInfo = async () => {
       userInfo.location = data.location || ''
       userInfo.avatar = data.avatar || ''
       if (data.background) currentBackground.value = data.background
+      // 同步到 localStorage
+      localStorage.setItem('userInfo', JSON.stringify({ ...userInfo, id: data.id }))
     }
   } catch (error) {
     console.error('Fetch User Info Error:', error)
@@ -689,7 +689,11 @@ const fetchPosts = async () => {
     if (result.code === 1 && result.data) {
       const articleList = Array.isArray(result.data) ? result.data : (result.data.list || [])
       
-      // 先获取当前用户已赞文章列表，用于标记 isLiked
+      // 按当前查看的用户ID过滤文章（自己的主页或他人主页）
+      const targetUid = isSelfProfile.value ? currentUserId.value : profileUserId.value
+      const userArticles = targetUid ? articleList.filter(a => a.author && a.author.id === targetUid) : articleList
+      
+      // 获取当前用户已赞文章列表，用于标记 isLiked
       const uid = currentUserId.value
       let likedIds = new Set()
       if (uid) {
@@ -701,7 +705,7 @@ const fetchPosts = async () => {
         } catch (e) { /* ignore */ }
       }
       
-      posts.value = articleList.map(article => {
+      posts.value = userArticles.map(article => {
         let dateStr = ''
         if (article.createTime) {
           if (Array.isArray(article.createTime)) {
@@ -721,7 +725,7 @@ const fetchPosts = async () => {
           type: article.type || (article.title ? 'article' : 'shuoshuo'), 
           likes: article.likes, comments: article.comments ?? 0, 
           createTimeStr: dateStr, date: dateStr,
-          isLiked: likedIds.has(article.id) // 用后端数据标记是否已赞
+          isLiked: likedIds.has(article.id)
         }
       })
     }

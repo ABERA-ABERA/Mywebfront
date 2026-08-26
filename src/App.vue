@@ -8,7 +8,7 @@ import MyIndex_head from './components/MyIndex/MyIndex_head.vue';
 
 <template>
   <!-- <MyIndex_head/> -->
-    <router-view/>
+    <router-view :key="$route.fullPath"/>
    
   <!-- <div><MyIndex_body/> </div> -->
 </template>

@@ -1,0 +1,312 @@
+{
+  "success": [
+    {
+      "name": "获取用户信息",
+      "method": "GET",
+      "path": "/admin/user/info",
+      "cat": "用户",
+      "status": "✅",
+      "detail": "code=1"
+    },
+    {
+      "name": "搜索用户",
+      "method": "GET",
+      "path": "/admin/user/search?keyword=root",
+      "cat": "用户",
+      "status": "✅",
+      "detail": "code=1"
+    },
+    {
+      "name": "关注/取消关注(带action)",
+      "method": "POST",
+      "path": "/admin/user/follow",
+      "cat": "用户",
+      "status": "✅",
+      "detail": "code=1"
+    },
+    {
+      "name": "获取关注列表",
+      "method": "GET",
+      "path": "/admin/user/following",
+      "cat": "用户",
+      "status": "✅",
+      "detail": "code=1"
+    },
+    {
+      "name": "获取粉丝列表",
+      "method": "GET",
+      "path": "/admin/user/followers",
+      "cat": "用户",
+      "status": "✅",
+      "detail": "code=1"
+    },
+    {
+      "name": "获取用户点赞文章",
+      "method": "GET",
+      "path": "/admin/user/like/2",
+      "cat": "用户",
+      "status": "✅",
+      "detail": "code=1"
+    },
+    {
+      "name": "获取文章列表",
+      "method": "GET",
+      "path": "/admin/article/list",
+      "cat": "文章",
+      "status": "✅",
+      "detail": "code=1"
+    },
+    {
+      "name": "获取文章详情(id=1)",
+      "method": "GET",
+      "path": "/admin/article/1",
+      "cat": "文章",
+      "status": "✅",
+      "detail": "code=1"
+    },
+    {
+      "name": "发布文章",
+      "method": "POST",
+      "path": "/admin/article/add",
+      "cat": "文章",
+      "status": "✅",
+      "detail": "code=1"
+    },
+    {
+      "name": "点赞(带action)",
+      "method": "POST",
+      "path": "/admin/article/like",
+      "cat": "文章",
+      "status": "✅",
+      "detail": "code=1"
+    },
+    {
+      "name": "增加浏览量",
+      "method": "POST",
+      "path": "/admin/article/view",
+      "cat": "文章",
+      "status": "✅",
+      "detail": "code=1"
+    },
+    {
+      "name": "获取热榜",
+      "method": "GET",
+      "path": "/admin/article/hot",
+      "cat": "文章",
+      "status": "✅",
+      "detail": "code=1"
+    },
+    {
+      "name": "获取随机文章",
+      "method": "GET",
+      "path": "/admin/article/random",
+      "cat": "文章",
+      "status": "✅",
+      "detail": "code=1"
+    },
+    {
+      "name": "收藏/取消收藏",
+      "method": "POST",
+      "path": "/admin/article/collect",
+      "cat": "文章",
+      "status": "✅",
+      "detail": "code=1"
+    },
+    {
+      "name": "保存草稿",
+      "method": "POST",
+      "path": "/admin/article/draft",
+      "cat": "文章",
+      "status": "✅",
+      "detail": "code=1"
+    },
+    {
+      "name": "加载草稿",
+      "method": "GET",
+      "path": "/admin/article/draft",
+      "cat": "文章",
+      "status": "✅",
+      "detail": "code=1"
+    },
+    {
+      "name": "获取文章评论",
+      "method": "GET",
+      "path": "/admin/article/comment/1",
+      "cat": "评论",
+      "status": "✅",
+      "detail": "code=1"
+    },
+    {
+      "name": "点赞评论(带action)",
+      "method": "POST",
+      "path": "/admin/comment/like",
+      "cat": "评论",
+      "status": "✅",
+      "detail": "code=1"
+    },
+    {
+      "name": "搜索文章",
+      "method": "GET",
+      "path": "/admin/search?q=test&type=articles",
+      "cat": "搜索",
+      "status": "✅",
+      "detail": "code=1"
+    },
+    {
+      "name": "获取通知列表",
+      "method": "GET",
+      "path": "/admin/notification/list",
+      "cat": "通知",
+      "status": "✅",
+      "detail": "code=1"
+    },
+    {
+      "name": "获取热榜(list)",
+      "method": "GET",
+      "path": "/admin/hot/list",
+      "cat": "热榜",
+      "status": "✅",
+      "detail": "code=1"
+    }
+  ],
+  "bug": [
+    {
+      "name": "修改用户信息",
+      "method": "POST",
+      "path": "/admin/user/change",
+      "cat": "用户",
+      "status": "⚠️",
+      "detail": "code=0, msg=\r\n### Error updating database.  Cause: java.sql.SQLSyntaxErrorException: Unknown column 'background' in 'field list'\r\n### The error may exist in com/example/myweb/Mapper/UserMapper.java (best guess)\r\n### The error may involve com.example.myweb.Mapper.UserMapper.updata-Inline\r\n### The error occurred while setting parameters\r\n### SQL: update users set background = ?, username = ?, location = ?, updateTime = now(), email = ?, avatar = ?, bio = ? where id = ?\r\n### Cause: java.sql.SQLSyntaxErrorException: Unknown column 'background' in 'field list'\n; bad SQL grammar []"
+    },
+    {
+      "name": "修改文章",
+      "method": "POST",
+      "path": "/admin/article/update",
+      "cat": "文章",
+      "status": "⚠️",
+      "detail": "code=0, msg=无权修改此文章"
+    },
+    {
+      "name": "删除文章(id=99999)",
+      "method": "DELETE",
+      "path": "/admin/article/delete/99999",
+      "cat": "文章",
+      "status": "⚠️",
+      "detail": "code=0, msg=文章不存在"
+    },
+    {
+      "name": "发表评论(带userId)",
+      "method": "POST",
+      "path": "/admin/article/comment",
+      "cat": "评论",
+      "status": "⚠️",
+      "detail": "code=0, msg=请求体格式错误，请检查 JSON 格式和 Content-Type 是否为 application/json"
+    },
+    {
+      "name": "上传文件",
+      "method": "POST",
+      "path": "/admin/upload",
+      "cat": "上传",
+      "status": "⚠️",
+      "detail": "code=0, msg=Cannot invoke \"org.springframework.web.multipart.MultipartFile.getOriginalFilename()\" because \"file\" is null"
+    },
+    {
+      "name": "获取商品列表",
+      "method": "GET",
+      "path": "/admin/trade/item/list",
+      "cat": "交易",
+      "status": "⚠️",
+      "detail": "code=0, msg=服务器错误：No endpoint GET /admin/trade/item/list."
+    },
+    {
+      "name": "获取商品详情",
+      "method": "GET",
+      "path": "/admin/trade/item/1",
+      "cat": "交易",
+      "status": "⚠️",
+      "detail": "code=0, msg=服务器错误：No endpoint GET /admin/trade/item/1."
+    },
+    {
+      "name": "发布商品",
+      "method": "POST",
+      "path": "/admin/trade/item/add",
+      "cat": "交易",
+      "status": "⚠️",
+      "detail": "code=0, msg=服务器错误：No endpoint POST /admin/trade/item/add."
+    },
+    {
+      "name": "获取任务列表",
+      "method": "GET",
+      "path": "/admin/errand/task/list",
+      "cat": "跑腿",
+      "status": "⚠️",
+      "detail": "code=0, msg=服务器错误：No endpoint GET /admin/errand/task/list."
+    },
+    {
+      "name": "获取任务详情",
+      "method": "GET",
+      "path": "/admin/errand/task/1",
+      "cat": "跑腿",
+      "status": "⚠️",
+      "detail": "code=0, msg=服务器错误：No endpoint GET /admin/errand/task/1."
+    },
+    {
+      "name": "接单任务",
+      "method": "POST",
+      "path": "/admin/errand/task/accept",
+      "cat": "跑腿",
+      "status": "⚠️",
+      "detail": "code=0, msg=服务器错误：No endpoint POST /admin/errand/task/accept."
+    },
+    {
+      "name": "发布任务",
+      "method": "POST",
+      "path": "/admin/errand/task/add",
+      "cat": "跑腿",
+      "status": "⚠️",
+      "detail": "code=0, msg=服务器错误：No endpoint POST /admin/errand/task/add."
+    },
+    {
+      "name": "获取会话列表",
+      "method": "GET",
+      "path": "/admin/message/conversations",
+      "cat": "私信",
+      "status": "⚠️",
+      "detail": "code=0, msg=服务器错误：No endpoint GET /admin/message/conversations."
+    },
+    {
+      "name": "获取消息记录",
+      "method": "GET",
+      "path": "/admin/message/history/1",
+      "cat": "私信",
+      "status": "⚠️",
+      "detail": "code=0, msg=服务器错误：No endpoint GET /admin/message/history/1."
+    },
+    {
+      "name": "发送私信",
+      "method": "POST",
+      "path": "/admin/message/send",
+      "cat": "私信",
+      "status": "⚠️",
+      "detail": "code=0, msg=服务器错误：No endpoint POST /admin/message/send."
+    },
+    {
+      "name": "获取未读消息数",
+      "method": "GET",
+      "path": "/admin/message/unread",
+      "cat": "私信",
+      "status": "⚠️",
+      "detail": "code=0, msg=服务器错误：No endpoint GET /admin/message/unread."
+    },
+    {
+      "name": "标记消息已读",
+      "method": "POST",
+      "path": "/admin/message/read",
+      "cat": "私信",
+      "status": "⚠️",
+      "detail": "code=0, msg=服务器错误：No endpoint POST /admin/message/read."
+    }
+  ],
+  "notFound": [],
+  "error": []
+}

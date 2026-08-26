@@ -41,27 +41,19 @@ const fetchWithFallback = async (url, options = {}, mockFallback = null) => {
  * 原始接口: GET /admin/user/info
  */
 export const fetchUserInfo = async () => {
-  return fetchWithFallback('/admin/user/info', { method: 'GET' }, {
-    id: 1,
-    username: 'Mock用户',
-    name: 'Mock用户',
-    email: 'mock@zhihu.com',
-    avatar: 'https://mywebpro.oss-cn-beijing.aliyuncs.com/ac052700-4c99-48a0-8e11-57d95c025220.jpg',
-    bio: '这个人很懒，什么都没有留下~',
-    location: '北京',
-    createTime: [2024, 1, 10],
-    followers: 128,
-    following: 56,
-    articles: 12
-  })
+  return fetchWithFallback('/admin/user/info', { method: 'GET' }, null)
 }
 
 /**
  * 获取文章列表
- * 原始接口: GET /admin/article/list
+ * 原始接口: GET /admin/article/list?page=1&pageSize=10
  */
-export const fetchArticleList = async () => {
-  return fetchWithFallback('/admin/article/list', { method: 'GET' }, mockArticles)
+export const fetchArticleList = async (page, pageSize) => {
+  let url = '/admin/article/list'
+  if (page != null && pageSize != null) {
+    url += `?page=${page}&pageSize=${pageSize}`
+  }
+  return fetchWithFallback(url, { method: 'GET' }, mockArticles)
 }
 
 /**
@@ -133,13 +125,15 @@ export const fetchUpload = async (file) => {
 
 /**
  * 点赞/取消点赞文章
- * 预留接口: POST /admin/article/like
+ * 接口: POST /admin/article/like
+ * @param {number} articleId
+ * @param {string} action - 'like' 或 'unlike'
  */
-export const fetchLikeArticle = async (articleId) => {
+export const fetchLikeArticle = async (articleId, action = 'like') => {
   return fetchWithFallback('/admin/article/like', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ articleId })
+    body: JSON.stringify({ articleId, action })
   })
 }
 
@@ -189,13 +183,17 @@ export const fetchAddComment = async (payload) => {
 
 /**
  * 关注/取消关注用户
- * 预留接口: POST /admin/user/follow
+ * 接口: POST /admin/user/follow
+ * @param {number} userId
+ * @param {string} action - 'follow' 或 'unfollow'（可选，后端实际为 toggle 模式）
  */
-export const fetchFollowUser = async (userId) => {
+export const fetchFollowUser = async (userId, action) => {
+  const body = { userId }
+  if (action) body.action = action
   return fetchWithFallback('/admin/user/follow', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId })
+    body: JSON.stringify(body)
   })
 }
 
@@ -210,15 +208,18 @@ export const fetchFollowingList = async () => {
 /**
  * 获取热榜（按浏览量排名）
  * 接口: GET /admin/article/hot
- * 如果后端无此接口，使用文章列表按浏览量排序
+ * 如果后端返回的 views 全为 null/0，则用文章列表按浏览量排序代替
  */
 export const fetchHotArticles = async () => {
   const result = await fetchWithFallback('/admin/article/hot', { method: 'GET' }, null)
-  // 如果热榜接口失败，用文章列表排序代替
-  if (!result.success || !result.data) {
+  const list = Array.isArray(result.data) ? result.data : []
+  // 检查热榜数据是否有有效的浏览量
+  const hasValidViews = list.some(a => a.views != null && a.views > 0)
+  // 如果接口失败、无数据、或 views 全为 null/0，用文章列表排序代替
+  if (!result.success || !result.data || !hasValidViews) {
     const listResult = await fetchArticleList()
-    const list = Array.isArray(listResult.data) ? listResult.data : []
-    return { success: true, data: list.sort((a, b) => (b.views || 0) - (a.views || 0)).slice(0, 10) }
+    const fullList = Array.isArray(listResult.data) ? listResult.data : []
+    return { success: true, data: fullList.sort((a, b) => (b.views || 0) - (a.views || 0)).slice(0, 10) }
   }
   return result
 }
@@ -267,12 +268,29 @@ export const fetchRandomArticles = async () => {
 }
 
 /**
- * 获取用户点赞过的文章
+ * 获取用户点赞过的文章（指定用户）
  * 接口: GET /admin/user/like/{userId}
  * 后端直接返回文章列表数组
  */
 export const fetchLikedArticles = async (userId) => {
   return fetchWithFallback(`/admin/user/like/${userId}`, { method: 'GET' }, [])
+}
+
+/**
+ * 获取当前用户点赞过的文章（分页）
+ * 接口: GET /admin/user/liked?page=1&pageSize=10
+ * 后端返回: { list: [...], total, page, pageSize }
+ */
+export const fetchMyLikedArticles = async (page = 1, pageSize = 10) => {
+  return fetchWithFallback(`/admin/user/liked?page=${page}&pageSize=${pageSize}`, { method: 'GET' }, [])
+}
+
+/**
+ * 获取指定用户信息
+ * 接口: GET /admin/user/info/{id}
+ */
+export const fetchUserInfoById = async (id) => {
+  return fetchWithFallback(`/admin/user/info/${id}`, { method: 'GET' }, null)
 }
 
 /**
@@ -324,9 +342,22 @@ export const fetchCommentsByArticleId = (articleId) => {
 }
 
 /**
- * 获取热榜数据（mock）
+ * 获取热榜数据
+ * 接口: GET /admin/hot/list
  */
-export const fetchHotTopics = () => mockHotTopics
+export const fetchHotTopics = async () => {
+  const result = await fetchWithFallback('/admin/hot/list', { method: 'GET' }, null)
+  if (result.success && result.data) {
+    const list = Array.isArray(result.data) ? result.data : (result.data.list || [])
+    return list.map(item => ({
+      id: item.id,
+      title: item.title || item.name || '',
+      hotValue: item.hotValue || item.views || item.hot || 0,
+      ...item
+    }))
+  }
+  return mockHotTopics
+}
 
 /**
  * 获取标签数据（mock）
@@ -334,9 +365,16 @@ export const fetchHotTopics = () => mockHotTopics
 export const fetchTags = () => mockTags
 
 /**
- * 获取通知数据（mock）
+ * 获取通知数据
+ * 接口: GET /admin/notification/list
  */
-export const fetchNotifications = () => mockNotifications
+export const fetchNotifications = async () => {
+  const result = await fetchWithFallback('/admin/notification/list', { method: 'GET' }, null)
+  if (result.success && result.data) {
+    return Array.isArray(result.data) ? result.data : (result.data.list || [])
+  }
+  return mockNotifications
+}
 
 /**
  * 获取推荐用户（mock）
@@ -456,4 +494,47 @@ export const fetchSendMessage = async (payload) => {
  */
 export const fetchUnreadMessageCount = () => {
   return mockConversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0)
+}
+
+// ==================== 评论扩展接口 ====================
+
+/**
+ * 删除评论
+ * 接口: DELETE /admin/article/comment/delete/{id}
+ * 或 DELETE /admin/comment/delete/{id}
+ * 只能删除自己的评论
+ */
+export const fetchDeleteComment = async (commentId) => {
+  return fetchWithFallback(`/admin/comment/delete/${commentId}`, { method: 'DELETE' })
+}
+
+/**
+ * 点赞/取消点赞评论
+ * 接口: POST /admin/comment/like
+ * @param {number} commentId
+ * @param {string} action - 'like' 或 'unlike'（可选，后端为 toggle 模式）
+ */
+export const fetchLikeComment = async (commentId, action) => {
+  const body = { commentId }
+  if (action) body.action = action
+  return fetchWithFallback('/admin/comment/like', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  })
+}
+
+// ==================== 通知扩展接口 ====================
+
+/**
+ * 标记通知为已读
+ * 接口: POST /admin/notification/read
+ * @param {Array<number>} notificationIds - 要标记为已读的通知ID列表
+ */
+export const fetchMarkNotificationsRead = async (notificationIds) => {
+  return fetchWithFallback('/admin/notification/read', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ notificationIds })
+  })
 }

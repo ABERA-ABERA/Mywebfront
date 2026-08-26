@@ -371,7 +371,8 @@ onMounted(async () => {
   }
   
   // 加载热搜
-  hotSearchTopics.value = fetchHotTopics().slice(0, 5)
+  const hotTopics = await fetchHotTopics()
+  hotSearchTopics.value = hotTopics.slice(0, 5)
   
   // 从后端加载文章（如果有搜索词则搜索，否则加载全部）
   await searchArticlesFromBackend(searchQuery.value)

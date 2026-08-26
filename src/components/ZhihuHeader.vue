@@ -271,7 +271,7 @@ const handleLogout = () => {
 // 加载通知和用户信息
 onMounted(async () => {
   // 加载通知
-  notifications.value = fetchNotifications()
+  notifications.value = await fetchNotifications()
   
   // 加载未读私信数
   unreadMsgCount.value = fetchUnreadMessageCount()
@@ -279,7 +279,7 @@ onMounted(async () => {
   // 从真实接口获取用户信息
   if (localStorage.getItem('token')) {
     const result = await fetchUserInfo()
-    if (result.data && result.data.username) {
+    if (result.success && result.data && result.data.username) {
       const data = result.data
       if (data.createTime && Array.isArray(data.createTime)) {
         const [year, month, day] = data.createTime

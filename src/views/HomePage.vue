@@ -89,8 +89,21 @@
             </div>
           </div>
 
-          <div v-if="displayArticles.length === 0" class="empty-feed">
+          <div v-if="displayArticles.length === 0 && !isLoadingMore" class="empty-feed">
             {{ activeTab === 'follow' ? '还没有关注任何人，快去关注一些用户吧！' : '暂无内容' }}
+          </div>
+
+          <!-- 加载更多按钮 -->
+          <div v-if="displayArticles.length > 0" class="load-more-wrapper">
+            <button 
+              v-if="hasMore" 
+              class="load-more-btn" 
+              :disabled="isLoadingMore"
+              @click="loadMoreArticles"
+            >
+              {{ isLoadingMore ? '加载中...' : '加载更多' }}
+            </button>
+            <span v-else class="no-more-tip">没有更多了</span>
           </div>
         </div>
       </main>
@@ -113,7 +126,7 @@
 import { ref, computed, onMounted } from 'vue'
 import ZhihuHeader from '@/components/ZhihuHeader.vue'
 import ZhihuSidebar from '@/components/ZhihuSidebar.vue'
-import { fetchArticleList, fetchHotArticles, fetchFollowingList, fetchLikeArticle, fetchCollectArticle, fetchUserInfo } from '@/utils/api'
+import { fetchArticleList, fetchArticleDetail, fetchHotArticles, fetchFollowingList, fetchLikeArticle, fetchCollectArticle, fetchUserInfo } from '@/utils/api'
 
 const defaultAvatar = 'https://mywebpro.oss-cn-beijing.aliyuncs.com/ac052700-4c99-48a0-8e11-57d95c025220.jpg'
 
@@ -123,6 +136,12 @@ const activeTab = ref('recommend')
 const articles = ref([])
 const hotArticles = ref([])
 const followingIds = ref([])
+
+// 分页状态
+const currentPage = ref(1)
+const pageSize = 5
+const hasMore = ref(true)
+const isLoadingMore = ref(false)
 
 // 图片查看器
 const showImageViewer = ref(false)
@@ -178,12 +197,12 @@ const parseArticles = (list) => {
       },
       images: article.images || [],
       tags: article.tags || [],
-      likes: article.likes || 0,
+      likes: article.likes ?? 0,
       comments: article.comments ?? article.commentCount ?? 0,
-      views: article.views || 0,
+      views: Math.max(0, article.views ?? 0),
       createTime: dateStr,
-      isLiked: article.isLiked || false,
-      isCollected: article.isCollected || false
+      isLiked: !!article.isLiked,
+      isCollected: !!article.isCollected
     }
   })
 }
@@ -224,16 +243,44 @@ const getArticleImages = (article) => {
   return []
 }
 
+// 点赞 - 立即 ±1 + 图标变色 + 后端同步
 const quickLike = async (article) => {
-  article.isLiked = !article.isLiked
-  article.likes += article.isLiked ? 1 : -1
-  await fetchLikeArticle(article.id)
+  const wasLiked = article.isLiked
+  const newLiked = !wasLiked
+  // 立即更新：图标变色 + 数字 ±1
+  article.isLiked = newLiked
+  article.likes = Math.max(0, article.likes + (newLiked ? 1 : -1))
+  try {
+    await fetchLikeArticle(article.id, newLiked ? 'like' : 'unlike')
+    // 后端返回后用真实值覆盖
+    const detail = await fetchArticleDetail(article.id)
+    if (detail.success && detail.data) {
+      article.likes = Math.max(0, detail.data.likes ?? 0)
+      article.views = Math.max(0, detail.data.views ?? article.views)
+    }
+  } catch (e) {
+    console.error('点赞操作失败:', e)
+    // 失败时回滚
+    article.isLiked = wasLiked
+    article.likes = Math.max(0, article.likes + (newLiked ? -1 : 1))
+  }
 }
 
-// 快捷收藏
+// 收藏 - 图标立即切换 + 后端同步
 const quickCollect = async (article) => {
-  article.isCollected = !article.isCollected
-  await fetchCollectArticle(article.id)
+  const wasCollected = article.isCollected
+  article.isCollected = !wasCollected
+  try {
+    await fetchCollectArticle(article.id)
+    const detail = await fetchArticleDetail(article.id)
+    if (detail.success && detail.data) {
+      article.likes = Math.max(0, detail.data.likes ?? article.likes)
+      article.views = Math.max(0, detail.data.views ?? article.views)
+    }
+  } catch (e) {
+    console.error('收藏操作失败:', e)
+    article.isCollected = wasCollected
+  }
 }
 
 // 加载数据
@@ -264,14 +311,18 @@ onMounted(async () => {
     console.warn('获取用户信息失败:', e)
   }
   
-  // 调用真实接口 /admin/article/list
-  const result = await fetchArticleList()
+  // 调用真实接口 /admin/article/list 分页加载
+  currentPage.value = 1
+  hasMore.value = true
+  const result = await fetchArticleList(1, pageSize)
   console.log('[HomePage] article list result:', result)
-  if (result.data && Array.isArray(result.data)) {
-    console.log('[HomePage] first article raw data:', result.data[0])
+  const firstPageData = result.data || []
+  articles.value = parseArticles(firstPageData)
+  // 如果返回数量少于 pageSize，说明没有更多了
+  if (Array.isArray(firstPageData) && firstPageData.length < pageSize) {
+    hasMore.value = false
   }
-  articles.value = parseArticles(result.data)
-  console.log('[HomePage] parsed articles:', articles.value.length, 'first:', articles.value[0])
+  console.log('[HomePage] parsed articles:', articles.value.length)
   
   // 加载热榜数据
   const hotResult = await fetchHotArticles()
@@ -281,6 +332,30 @@ onMounted(async () => {
   const followResult = await fetchFollowingList()
   followingIds.value = (followResult.data || []).map(u => u.id || u)
 })
+
+// 加载更多文章
+const loadMoreArticles = async () => {
+  if (isLoadingMore.value || !hasMore.value) return
+  isLoadingMore.value = true
+  try {
+    const nextPage = currentPage.value + 1
+    const result = await fetchArticleList(nextPage, pageSize)
+    const newData = result.data || []
+    const newArticles = parseArticles(newData)
+    if (newArticles.length > 0) {
+      articles.value = [...articles.value, ...newArticles]
+      currentPage.value = nextPage
+    }
+    // 返回数量少于 pageSize 或为空，说明没有更多了
+    if (Array.isArray(newData) && newData.length < pageSize) {
+      hasMore.value = false
+    }
+  } catch (e) {
+    console.error('加载更多文章失败:', e)
+  } finally {
+    isLoadingMore.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -567,5 +642,38 @@ onMounted(async () => {
     width: 16px;
     height: 16px;
   }
+}
+
+/* 加载更多按钮 */
+.load-more-wrapper {
+  text-align: center;
+  padding: 20px 0;
+}
+
+.load-more-btn {
+  background: #fff;
+  border: 1px solid #dcdfe6;
+  color: #666;
+  padding: 10px 32px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.load-more-btn:hover:not(:disabled) {
+  background: #f0f6ff;
+  border-color: #0084ff;
+  color: #0084ff;
+}
+
+.load-more-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.no-more-tip {
+  color: #999;
+  font-size: 13px;
 }
 </style>

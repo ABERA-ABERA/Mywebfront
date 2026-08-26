@@ -29,7 +29,7 @@
 | `/admin/article/view` | POST | 文章详情 | 增加浏览量 |
 | `/admin/article/collect` | POST | 文章详情、首页 | 收藏/取消收藏 |
 | `/admin/article/hot` | GET | 首页热榜、发现页、侧边栏 | 热榜（按浏览量排名） |
-| `/admin/article/random` | GET | 发现页 | 随机返回文章 |
+| `/admin/article/random`  等着文章缓存做好写 | GET | 发现页 | 随机返回文章 |
 | `/admin/article/comment/{articleId}` | GET | 文章详情 | 获取文章评论列表 |
 | `/admin/article/comment` | POST | 文章详情 | 发表评论（支持图片） |
 | `/admin/article/draft` | POST | 写文章页 | 保存草稿 |
@@ -1751,31 +1751,60 @@ CREATE INDEX idx_draft_user ON draft(user_id);
 
 **接口**: `GET /admin/trade/item/list`
 
-**请求头**: `token: xxx`
+**请求头**: `token: xxx`（可选，不传则不返回 isLiked 等用户相关字段）
 
 **查询参数**:
-- `category`: 分类筛选（可选）
-- `page`: 页码（默认 1）
-- `pageSize`: 每页数量（默认 20）
 
-**响应字段说明**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| category | String | 否 | 分类筛选（数码/书籍/生活/服饰/其他） |
+| page | Integer | 否 | 页码，默认 1 |
+| pageSize | Integer | 否 | 每页数量，默认 20 |
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `id` | int | 商品 ID |
-| `title` | string | 商品标题 |
-| `description` | string | 商品描述 |
-| `price` | number | 售价 |
-| `originalPrice` | number | 原价 |
-| `images` | array | 商品图片 URL 数组 |
-| `category` | string | 分类 |
-| `condition` | string | 成色 |
-| `seller` | object | 卖家信息 |
-| `views` | int | 浏览次数 |
-| `likes` | int | 收藏数 |
-| `createTime` | string | 发布时间 |
-| `location` | string | 交易地点 |
-| `status` | string | 状态：selling/sold/offline |
+**响应示例**:
+```json
+{
+  "code": 1,
+  "msg": null,
+  "data": {
+    "list": [
+      {
+        "id": 1,
+        "title": "二手iPad Air 5",
+        "description": "9成新，使用一年，无磕碰，配件齐全",
+        "price": 1500.00,
+        "originalPrice": 3999.00,
+        "images": ["https://oss.example.com/img1.jpg", "https://oss.example.com/img2.jpg"],
+        "category": "数码",
+        "condition": "9成新",
+        "seller": {
+          "id": 2,
+          "username": "root",
+          "avatar": "https://oss.example.com/avatar.jpg"
+        },
+        "views": 120,
+        "likes": 5,
+        "createTime": "2026-08-10 10:30",
+        "location": "校内3号楼",
+        "status": "selling"
+      }
+    ],
+    "total": 50,
+    "page": 1,
+    "pageSize": 20
+  }
+}
+```
+
+**status 字段说明**:
+
+| 值 | 说明 |
+|----|------|
+| selling | 在售中 |
+| sold | 已售出 |
+| offline | 已下架 |
+
+**实现**: `TradeItemController.list` → `TradeItemService.getItemList` → `TradeItemMapper.selectList`
 
 ---
 
@@ -1783,25 +1812,94 @@ CREATE INDEX idx_draft_user ON draft(user_id);
 
 **接口**: `GET /admin/trade/item/{id}`
 
+**描述**: 获取单个商品的完整信息，同时增加浏览量
+
+**路径参数**:
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| id | Long | 商品 ID |
+
+**响应示例**:
+```json
+{
+  "code": 1,
+  "msg": null,
+  "data": {
+    "id": 1,
+    "title": "二手iPad Air 5",
+    "description": "9成新，使用一年，无磕碰，配件齐全",
+    "price": 1500.00,
+    "originalPrice": 3999.00,
+    "images": ["https://oss.example.com/img1.jpg", "https://oss.example.com/img2.jpg"],
+    "category": "数码",
+    "condition": "9成新",
+    "seller": {
+      "id": 2,
+      "username": "root",
+      "avatar": "https://oss.example.com/avatar.jpg",
+      "bio": "学习ing...."
+    },
+    "views": 121,
+    "likes": 5,
+    "createTime": "2026-08-10 10:30",
+    "location": "校内3号楼",
+    "status": "selling",
+    "isLiked": false
+  }
+}
+```
+
+**实现**: `TradeItemController.detail` → `TradeItemService.getItemDetail` → `TradeItemMapper.selectById`
+
 ---
 
 ### 10.3 发布闲置商品
 
 **接口**: `POST /admin/trade/item/add`
 
+**描述**: 发布二手/闲置商品，需登录认证
+
+**请求头**: `token: {jwt}`
+
 **请求参数**:
 ```json
 {
-  "title": "string",
-  "description": "string",
-  "price": 2800,
-  "originalPrice": 4799,
-  "images": ["url1", "url2"],
-  "category": "string",
-  "condition": "string",
-  "location": "string"
+  "title": "二手iPad Air 5",
+  "description": "9成新，使用一年，无磕碰，配件齐全",
+  "price": 1500.00,
+  "originalPrice": 3999.00,
+  "images": ["https://oss.example.com/img1.jpg", "https://oss.example.com/img2.jpg"],
+  "category": "数码",
+  "condition": "9成新",
+  "location": "校内3号楼"
 }
 ```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| title | String | 是 | 商品标题，最长100字 |
+| description | String | 是 | 商品描述 |
+| price | BigDecimal | 是 | 售价，精确到分 |
+| originalPrice | BigDecimal | 否 | 原价 |
+| images | Array\<String\> | 否 | 图片URL数组 |
+| category | String | 是 | 分类（数码/书籍/生活/服饰/其他） |
+| condition | String | 否 | 成色（全新/9成新/8成新/7成新以下） |
+| location | String | 否 | 交易地点 |
+
+**响应示例**:
+```json
+{
+  "code": 1,
+  "msg": "发布成功",
+  "data": {
+    "id": 10,
+    "createTime": "2026-08-18 15:00"
+  }
+}
+```
+
+**实现**: `TradeItemController.add` → `TradeItemService.addItem` → `TradeItemMapper.insert`
 
 ---
 
@@ -1809,22 +1907,60 @@ CREATE INDEX idx_draft_user ON draft(user_id);
 
 **接口**: `GET /admin/errand/task/list`
 
-**响应字段说明**:
+**描述**: 获取跑腿任务列表，支持按分类筛选，按创建时间倒序
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `id` | int | 任务 ID |
-| `title` | string | 任务标题 |
-| `description` | string | 任务描述 |
-| `reward` | number | 赏金（元） |
-| `category` | string | 分类 |
-| `publisher` | object | 发布者信息 |
-| `runner` | object/null | 接单人信息 |
-| `fromLocation` | string | 出发地 |
-| `toLocation` | string | 目的地 |
-| `deadline` | string | 截止时间 |
-| `status` | string | 状态：pending/accepted/completed |
-| `tags` | array | 标签数组 |
+**查询参数**:
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| category | String | 否 | 分类筛选（代取快递/代买/代送/其他） |
+| page | Integer | 否 | 页码，默认 1 |
+| pageSize | Integer | 否 | 每页数量，默认 20 |
+
+**响应示例**:
+```json
+{
+  "code": 1,
+  "msg": null,
+  "data": {
+    "list": [
+      {
+        "id": 1,
+        "title": "帮取菜鸟驿站快递",
+        "description": "菜鸟驿站3个包裹，取件码: 5-2-1001，送到3号楼502",
+        "reward": 5.00,
+        "category": "代取快递",
+        "publisher": {
+          "id": 2,
+          "username": "root",
+          "avatar": "https://oss.example.com/avatar.jpg"
+        },
+        "runner": null,
+        "fromLocation": "菜鸟驿站",
+        "toLocation": "3号楼502",
+        "deadline": "2026-08-18 18:00",
+        "status": "pending",
+        "tags": ["急", "大件"],
+        "createTime": "2026-08-18 09:00"
+      }
+    ],
+    "total": 30,
+    "page": 1,
+    "pageSize": 20
+  }
+}
+```
+
+**status 字段说明**:
+
+| 值 | 说明 |
+|----|------|
+| pending | 待接单 |
+| accepted | 进行中（已接单） |
+| completed | 已完成 |
+| cancelled | 已取消 |
+
+**实现**: `ErrandTaskController.list` → `ErrandTaskService.getTaskList` → `ErrandTaskMapper.selectList`
 
 ---
 
@@ -1832,18 +1968,86 @@ CREATE INDEX idx_draft_user ON draft(user_id);
 
 **接口**: `GET /admin/errand/task/{id}`
 
+**描述**: 获取单个跑腿任务的完整信息
+
+**路径参数**:
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| id | Long | 任务 ID |
+
+**响应示例**:
+```json
+{
+  "code": 1,
+  "msg": null,
+  "data": {
+    "id": 1,
+    "title": "帮取菜鸟驿站快递",
+    "description": "菜鸟驿站3个包裹，取件码: 5-2-1001，送到3号楼502",
+    "reward": 5.00,
+    "category": "代取快递",
+    "publisher": {
+      "id": 2,
+      "username": "root",
+      "avatar": "https://oss.example.com/avatar.jpg"
+    },
+    "runner": null,
+    "fromLocation": "菜鸟驿站",
+    "toLocation": "3号楼502",
+    "deadline": "2026-08-18 18:00",
+    "status": "pending",
+    "tags": ["急", "大件"],
+    "createTime": "2026-08-18 09:00"
+  }
+}
+```
+
+**实现**: `ErrandTaskController.detail` → `ErrandTaskService.getTaskDetail` → `ErrandTaskMapper.selectById`
+
 ---
 
 ### 10.6 接受跑腿任务
 
 **接口**: `POST /admin/errand/task/accept`
 
+**描述**: 接单一个跑腿任务，需登录认证。任务状态从 pending 变为 accepted
+
+**请求头**: `token: {jwt}`
+
 **请求参数**:
 ```json
 {
-  "taskId": 4001
+  "taskId": 1
 }
 ```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| taskId | Long | 是 | 任务 ID |
+
+**响应示例**:
+```json
+{
+  "code": 1,
+  "msg": "接单成功",
+  "data": {
+    "id": 1,
+    "status": "accepted",
+    "runner": {
+      "id": 3,
+      "username": "李四"
+    }
+  }
+}
+```
+
+**业务规则**:
+- 只有 status=pending 的任务可接单
+- 发布者不能接自己发布的任务
+- 接单后 status 变为 accepted
+
+**实现**: `ErrandTaskController.accept` → `ErrandTaskService.acceptTask`
 
 ---
 
@@ -1851,19 +2055,48 @@ CREATE INDEX idx_draft_user ON draft(user_id);
 
 **接口**: `POST /admin/errand/task/add`
 
+**描述**: 发布跑腿任务，需登录认证
+
+**请求头**: `token: {jwt}`
+
 **请求参数**:
 ```json
 {
-  "title": "string",
-  "description": "string",
-  "reward": 5,
-  "category": "string",
-  "fromLocation": "string",
-  "toLocation": "string",
-  "deadline": "string",
+  "title": "帮取菜鸟驿站快递",
+  "description": "3个包裹，取件码5-2-1001，送到3号楼502",
+  "reward": 5.00,
+  "category": "代取快递",
+  "fromLocation": "菜鸟驿站",
+  "toLocation": "3号楼502",
+  "deadline": "2026-08-18 18:00",
   "tags": ["急", "大件"]
 }
 ```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| title | String | 是 | 任务标题，最长100字 |
+| description | String | 否 | 任务描述 |
+| reward | BigDecimal | 是 | 赏金，精确到分 |
+| category | String | 是 | 分类（代取快递/代买/代送/其他） |
+| fromLocation | String | 否 | 出发地 |
+| toLocation | String | 否 | 目的地 |
+| deadline | String | 否 | 截止时间，格式 YYYY-MM-DD HH:mm |
+| tags | Array\<String\> | 否 | 标签数组 |
+
+**响应示例**:
+```json
+{
+  "code": 1,
+  "msg": "发布成功",
+  "data": {
+    "id": 10,
+    "createTime": "2026-08-18 15:00"
+  }
+}
+```
+
+**实现**: `ErrandTaskController.add` → `ErrandTaskService.addTask` → `ErrandTaskMapper.insert`
 
 ---
 
@@ -1873,16 +2106,56 @@ CREATE INDEX idx_draft_user ON draft(user_id);
 
 **接口**: `GET /admin/message/conversations`
 
-**响应字段说明**:
+**描述**: 获取当前登录用户的私信会话列表，按最后消息时间倒序
+
+**请求头**: `token: {jwt}`
+
+**响应示例**:
+```json
+{
+  "code": 1,
+  "msg": null,
+  "data": [
+    {
+      "id": 1,
+      "user": {
+        "id": 3,
+        "username": "莲莲",
+        "avatar": "https://oss.example.com/avatar3.jpg"
+      },
+      "lastMessage": "好的，明天见！",
+      "lastTime": "2026-08-18 10:30",
+      "unreadCount": 2,
+      "isOnline": false
+    },
+    {
+      "id": 2,
+      "user": {
+        "id": 5,
+        "username": "王五",
+        "avatar": "https://oss.example.com/avatar5.jpg"
+      },
+      "lastMessage": "商品还在吗？",
+      "lastTime": "2026-08-17 20:15",
+      "unreadCount": 0,
+      "isOnline": true
+    }
+  ]
+}
+```
+
+**字段说明**:
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `id` | int | 会话 ID |
-| `user` | object | 对方用户信息 |
-| `lastMessage` | string | 最后一条消息内容 |
-| `lastTime` | string | 最后消息时间 |
-| `unreadCount` | int | 未读消息数 |
-| `isOnline` | boolean | 是否在线 |
+| id | Long | 会话 ID |
+| user | Object | 对方用户信息（id/username/avatar） |
+| lastMessage | String | 最后一条消息内容 |
+| lastTime | String | 最后消息时间 |
+| unreadCount | Integer | 未读消息数 |
+| isOnline | Boolean | 对方是否在线 |
+
+**实现**: `MessageController.conversations` → `MessageService.getConversations`
 
 ---
 
@@ -1890,15 +2163,60 @@ CREATE INDEX idx_draft_user ON draft(user_id);
 
 **接口**: `GET /admin/message/history/{conversationId}`
 
-**响应字段说明**:
+**描述**: 获取与某用户的聊天记录，按时间正序
 
-| 字段 | 类型 | 说明 |
+**请求头**: `token: {jwt}`
+
+**路径参数**:
+
+| 参数 | 类型 | 说明 |
 |------|------|------|
-| `id` | int | 消息 ID |
-| `senderId` | int | 发送者 ID |
-| `content` | string | 消息内容 |
-| `time` | string | 发送时间 |
-| `isRead` | boolean | 是否已读 |
+| conversationId | Long | 会话 ID |
+
+**查询参数**:
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| page | Integer | 否 | 页码，默认 1 |
+| pageSize | Integer | 否 | 每页数量，默认 50 |
+
+**响应示例**:
+```json
+{
+  "code": 1,
+  "msg": null,
+  "data": {
+    "list": [
+      {
+        "id": 1,
+        "senderId": 2,
+        "content": "你好，在吗？",
+        "time": "2026-08-18 10:00",
+        "isRead": true
+      },
+      {
+        "id": 2,
+        "senderId": 3,
+        "content": "在的，什么事？",
+        "time": "2026-08-18 10:05",
+        "isRead": true
+      },
+      {
+        "id": 3,
+        "senderId": 2,
+        "content": "想问一下那个iPad还在吗",
+        "time": "2026-08-18 10:06",
+        "isRead": false
+      }
+    ],
+    "total": 3,
+    "page": 1,
+    "pageSize": 50
+  }
+}
+```
+
+**实现**: `MessageController.history` → `MessageService.getMessageHistory` → `MessageMapper.selectHistory`
 
 ---
 
@@ -1906,13 +2224,43 @@ CREATE INDEX idx_draft_user ON draft(user_id);
 
 **接口**: `POST /admin/message/send`
 
+**描述**: 向指定会话发送私信，需登录认证
+
+**请求头**: `token: {jwt}`
+
 **请求参数**:
 ```json
 {
-  "conversationId": 5001,
-  "content": "string"
+  "conversationId": 1,
+  "content": "你好，在吗？"
 }
 ```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| conversationId | Long | 是 | 会话 ID |
+| content | String | 是 | 消息内容，最长500字 |
+
+**响应示例**:
+```json
+{
+  "code": 1,
+  "msg": "发送成功",
+  "data": {
+    "id": 100,
+    "senderId": 2,
+    "content": "你好，在吗？",
+    "time": "2026-08-18 10:30",
+    "isRead": false
+  }
+}
+```
+
+**业务规则**:
+- 发送后自动将对方的未读计数 +1
+- 更新会话的 lastMessage 和 lastTime
+
+**实现**: `MessageController.send` → `MessageService.sendMessage` → `MessageMapper.insert`
 
 ---
 
@@ -1920,18 +2268,54 @@ CREATE INDEX idx_draft_user ON draft(user_id);
 
 **接口**: `GET /admin/message/unread`
 
+**描述**: 获取当前登录用户的总未读消息数
+
+**请求头**: `token: {jwt}`
+
+**响应示例**:
+```json
+{
+  "code": 1,
+  "msg": null,
+  "data": {
+    "totalUnread": 5
+  }
+}
+```
+
+**实现**: `MessageController.unread` → `MessageService.getUnreadCount`
+
 ---
 
 ### 11.5 标记消息已读
 
 **接口**: `POST /admin/message/read`
 
+**描述**: 标记某会话中的所有消息为已读
+
+**请求头**: `token: {jwt}`
+
 **请求参数**:
 ```json
 {
-  "conversationId": 5001
+  "conversationId": 1
 }
 ```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| conversationId | Long | 是 | 会话 ID |
+
+**响应示例**:
+```json
+{
+  "code": 1,
+  "msg": "标记已读成功",
+  "data": null
+}
+```
+
+**实现**: `MessageController.markAsRead` → `MessageService.markAsRead`
 
 ---
 
@@ -1941,28 +2325,58 @@ CREATE INDEX idx_draft_user ON draft(user_id);
 
 **接口**: `POST /admin/order/create`
 
+**描述**: 创建交易订单（二手商品购买或跑腿任务接单），需登录认证
+
+**请求头**: `token: {jwt}`
+
 **请求参数**:
 ```json
 {
   "type": "trade",
-  "itemId": 3001,
-  "taskId": 4001,
+  "itemId": 1,
+  "taskId": null,
   "tradeMethod": "face",
-  "remark": "string"
+  "remark": "希望面交"
 }
 ```
 
-**响应字段说明**:
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| type | String | 是 | 订单类型：trade(商品)/errand(跑腿) |
+| itemId | Long | 否 | 商品 ID（type=trade 时必填） |
+| taskId | Long | 否 | 任务 ID（type=errand 时必填） |
+| tradeMethod | String | 否 | 交易方式：face(面交)/express(快递) |
+| remark | String | 否 | 备注 |
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `orderId` | int | 订单 ID |
-| `orderNo` | string | 订单编号 |
-| `type` | string | 订单类型 |
-| `buyerId` | int | 买家/接单人 ID |
-| `sellerId` | int | 卖家/发布者 ID |
-| `amount` | number | 订单金额 |
-| `status` | string | 状态：pending/confirmed/shipped/completed/cancelled |
+**响应示例**:
+```json
+{
+  "code": 1,
+  "msg": "订单创建成功",
+  "data": {
+    "orderId": 1,
+    "orderNo": "ORD20260818150000001",
+    "type": "trade",
+    "buyerId": 3,
+    "sellerId": 2,
+    "amount": 1500.00,
+    "status": "pending",
+    "createTime": "2026-08-18 15:00"
+  }
+}
+```
+
+**status 状态流转**:
+
+| 值 | 说明 |
+|----|------|
+| pending | 待确认 |
+| confirmed | 已确认 |
+| shipped | 已发货 |
+| completed | 已完成 |
+| cancelled | 已取消 |
+
+**实现**: `OrderController.create` → `OrderService.createOrder` → `OrderMapper.insert`
 
 ---
 
@@ -1970,11 +2384,103 @@ CREATE INDEX idx_draft_user ON draft(user_id);
 
 **接口**: `GET /admin/order/{id}`
 
+**描述**: 获取单个订单的完整信息
+
+**请求头**: `token: {jwt}`
+
+**路径参数**:
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| id | Long | 订单 ID |
+
+**响应示例**:
+```json
+{
+  "code": 1,
+  "msg": null,
+  "data": {
+    "orderId": 1,
+    "orderNo": "ORD20260818150000001",
+    "type": "trade",
+    "buyer": {
+      "id": 3,
+      "username": "李四",
+      "avatar": "https://oss.example.com/avatar3.jpg"
+    },
+    "seller": {
+      "id": 2,
+      "username": "root",
+      "avatar": "https://oss.example.com/avatar.jpg"
+    },
+    "item": {
+      "id": 1,
+      "title": "二手iPad Air 5",
+      "images": ["https://oss.example.com/img1.jpg"]
+    },
+    "amount": 1500.00,
+    "tradeMethod": "face",
+    "remark": "希望面交",
+    "status": "pending",
+    "createTime": "2026-08-18 15:00"
+  }
+}
+```
+
+**实现**: `OrderController.detail` → `OrderService.getOrderDetail` → `OrderMapper.selectById`
+
 ---
 
 ### 12.3 获取我的订单列表
 
 **接口**: `GET /admin/order/list`
+
+**描述**: 获取当前用户的订单列表（买家和卖家身份均包含），按创建时间倒序
+
+**请求头**: `token: {jwt}`
+
+**查询参数**:
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| type | String | 否 | 筛选类型：trade/errand |
+| status | String | 否 | 筛选状态 |
+| role | String | 否 | 筛选角色：buyer/seller（默认全部） |
+| page | Integer | 否 | 页码，默认 1 |
+| pageSize | Integer | 否 | 每页数量，默认 20 |
+
+**响应示例**:
+```json
+{
+  "code": 1,
+  "msg": null,
+  "data": {
+    "list": [
+      {
+        "orderId": 1,
+        "orderNo": "ORD20260818150000001",
+        "type": "trade",
+        "role": "buyer",
+        "otherUser": {
+          "id": 2,
+          "username": "root",
+          "avatar": "https://oss.example.com/avatar.jpg"
+        },
+        "itemTitle": "二手iPad Air 5",
+        "itemImage": "https://oss.example.com/img1.jpg",
+        "amount": 1500.00,
+        "status": "pending",
+        "createTime": "2026-08-18 15:00"
+      }
+    ],
+    "total": 5,
+    "page": 1,
+    "pageSize": 20
+  }
+}
+```
+
+**实现**: `OrderController.list` → `OrderService.getMyOrders` → `OrderMapper.selectByUserId`
 
 ---
 
@@ -1982,9 +2488,43 @@ CREATE INDEX idx_draft_user ON draft(user_id);
 
 **接口**: `POST /admin/order/update`
 
-**状态流转**:
-- `pending` → `confirmed` → `shipped` → `completed`
-- `pending`/`confirmed` → `cancelled`
+**描述**: 更新订单状态，需登录认证且只有交易双方可操作
+
+**请求头**: `token: {jwt}`
+
+**请求参数**:
+```json
+{
+  "orderId": 1,
+  "status": "confirmed"
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| orderId | Long | 是 | 订单 ID |
+| status | String | 是 | 目标状态 |
+
+**状态流转规则**:
+- `pending` → `confirmed`（卖家确认）
+- `confirmed` → `shipped`（卖家发货）
+- `shipped` → `completed`（买家确认收货）
+- `pending` / `confirmed` → `cancelled`（任一方取消）
+
+**响应示例**:
+```json
+{
+  "code": 1,
+  "msg": "状态更新成功",
+  "data": {
+    "orderId": 1,
+    "status": "confirmed",
+    "updateTime": "2026-08-18 16:00"
+  }
+}
+```
+
+**实现**: `OrderController.update` → `OrderService.updateOrderStatus` → `OrderMapper.updateStatus`
 
 ---
 
