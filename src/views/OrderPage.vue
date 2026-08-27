@@ -215,7 +215,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import ZhihuHeader from '@/components/ZhihuHeader.vue'
-import { fetchUserInfo } from '@/utils/api'
+import { fetchUserInfo, fetchCreateTradeOrder, fetchCreateErrandOrder } from '@/utils/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -254,15 +254,39 @@ const handleSubmit = async () => {
   if (submitting.value) return
   submitting.value = true
 
-  setTimeout(() => {
-    submitting.value = false
+  try {
     if (isTradeOrder.value) {
-      ElMessage.success('订单提交成功！请等待卖家确认')
+      const payload = {
+        itemId: route.query.itemId,
+        sellerId: orderData.value.sellerId,
+        tradeMethod: tradeMethod.value,
+        remark: remark.value
+      }
+      const result = await fetchCreateTradeOrder(payload)
+      if (result.data) {
+        ElMessage.success('订单提交成功！请等待卖家确认')
+        router.push('/trade')
+      } else {
+        ElMessage.error(result.msg || '下单失败，请稍后重试')
+      }
     } else {
-      ElMessage.success('已成功接单！请及时联系委托人')
+      const payload = {
+        taskId: route.query.taskId
+      }
+      const result = await fetchCreateErrandOrder(payload)
+      if (result.data) {
+        ElMessage.success('已成功接单！请及时联系委托人')
+        router.push('/trade')
+      } else {
+        ElMessage.error(result.msg || '接单失败，请稍后重试')
+      }
     }
-    router.push('/trade')
-  }, 1000)
+  } catch (err) {
+    console.error('提交订单失败:', err)
+    ElMessage.error('网络异常，请稍后重试')
+  } finally {
+    submitting.value = false
+  }
 }
 
 onMounted(async () => {

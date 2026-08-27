@@ -54,19 +54,20 @@
             @click="$router.push(`/trade/item/${item.id}`)"
           >
             <div class="item-cover-wrap">
-              <img :src="item.images[0]" class="item-cover" />
-              <span class="item-condition">{{ item.condition }}</span>
+              <img v-if="item.images && item.images.length" :src="item.images[0]" class="item-cover" />
+              <div v-else class="item-cover-placeholder">暂无图片</div>
+              <span class="item-condition">{{ item.condition || '未标注' }}</span>
             </div>
             <div class="item-info">
               <h4 class="item-title">{{ item.title }}</h4>
               <div class="item-price-row">
-                <span class="item-price">¥{{ item.price }}</span>
-                <span class="item-original">¥{{ item.originalPrice }}</span>
+                <span class="item-price">¥{{ item.price ?? 0 }}</span>
+                <span class="item-original" v-if="item.originalPrice">¥{{ item.originalPrice }}</span>
               </div>
               <div class="item-seller">
-                <img :src="item.seller.avatar" class="seller-avatar" />
-                <span class="seller-name">{{ item.seller.username }}</span>
-                <span class="item-views">{{ item.views }}浏览</span>
+                <img v-if="item.seller" :src="item.seller.avatar" class="seller-avatar" />
+                <span class="seller-name">{{ item.seller ? item.seller.username : '匿名用户' }}</span>
+                <span class="item-views">{{ item.views || 0 }}浏览</span>
               </div>
             </div>
           </div>
@@ -74,6 +75,18 @@
 
         <div v-if="filteredTradeItems.length === 0" class="empty-state">
           <p>暂无相关商品</p>
+        </div>
+
+        <!-- 随机商品换一批 -->
+        <div v-if="tradeCat === 0" class="refresh-bar">
+          <button class="refresh-btn" :disabled="refreshing" @click="handleRefresh">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="refresh-icon" :class="{ spinning: refreshing }">
+              <polyline points="23 4 23 10 17 10"/>
+              <polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
+            {{ refreshing ? '加载中...' : '换一批' }}
+          </button>
         </div>
       </div>
 
@@ -114,7 +127,7 @@
                 <span class="task-reward">¥{{ task.reward }}</span>
               </div>
               <div class="task-tags">
-                <span v-for="tag in task.tags" :key="tag" class="task-tag">{{ tag }}</span>
+                <span v-for="tag in (task.tags || [])" :key="tag" class="task-tag">{{ tag }}</span>
               </div>
             </div>
             <p class="task-desc">{{ task.description }}</p>
@@ -128,8 +141,8 @@
             </div>
             <div class="task-footer">
               <div class="task-publisher">
-                <img :src="task.publisher.avatar" class="publisher-avatar" />
-                <span class="publisher-name">{{ task.publisher.username }}</span>
+                <img v-if="task.publisher" :src="task.publisher.avatar" class="publisher-avatar" />
+                <span class="publisher-name">{{ task.publisher ? task.publisher.username : '匿名用户' }}</span>
               </div>
               <div class="task-meta">
                 <span class="task-deadline">
@@ -153,12 +166,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import ZhihuHeader from '@/components/ZhihuHeader.vue'
 import {
   fetchTradeItemList, fetchErrandTaskList,
   fetchTradeCategories, fetchErrandCategories,
+  fetchTradeRandomItems, fetchTradeHotItems,
   fetchUserInfo
 } from '@/utils/api'
 
@@ -170,6 +184,7 @@ const activeModule = ref('trade')
 const tradeCategories = ref([])
 const tradeItems = ref([])
 const tradeCat = ref(0)
+const refreshing = ref(false)
 
 // 跑腿接单
 const errandCategories = ref([])
@@ -177,7 +192,9 @@ const errandTasks = ref([])
 const errandCat = ref(0)
 
 const filteredTradeItems = computed(() => {
-  if (tradeCat.value === 0) return tradeItems.value
+  // 随机商品 / 热门商品：直接使用 tradeItems（从对应接口加载）
+  if (tradeCat.value === 0 || tradeCat.value === -1) return tradeItems.value
+  // 分类筛选
   const catName = tradeCategories.value.find(c => c.id === tradeCat.value)?.name
   return tradeItems.value.filter(i => i.category === catName)
 })
@@ -205,12 +222,46 @@ onMounted(async () => {
   tradeCategories.value = fetchTradeCategories()
   errandCategories.value = fetchErrandCategories()
 
-  const tradeResult = await fetchTradeItemList()
-  tradeItems.value = tradeResult.data || []
+  // 默认加载随机商品
+  await loadTradeItems()
 
   const errandResult = await fetchErrandTaskList()
   errandTasks.value = errandResult.data || []
 })
+
+// 根据当前分类加载商品
+const loadTradeItems = async () => {
+  if (tradeCat.value === 0) {
+    // 随机商品
+    const result = await fetchTradeRandomItems()
+    tradeItems.value = result.data || []
+  } else if (tradeCat.value === -1) {
+    // 热门商品
+    const result = await fetchTradeHotItems()
+    tradeItems.value = result.data || []
+  } else {
+    // 分类列表
+    const catName = tradeCategories.value.find(c => c.id === tradeCat.value)?.name
+    const result = await fetchTradeItemList(catName)
+    tradeItems.value = result.data || []
+  }
+}
+
+// 监听分类切换
+watch(tradeCat, () => {
+  loadTradeItems()
+})
+
+// 刷新随机商品
+const handleRefresh = async () => {
+  if (refreshing.value) return
+  refreshing.value = true
+  try {
+    await loadTradeItems()
+  } finally {
+    refreshing.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -336,6 +387,52 @@ onMounted(async () => {
 .publish-icon {
   width: 14px;
   height: 14px;
+}
+
+/* ========== 随机商品刷新栏 ========== */
+.refresh-bar {
+  display: flex;
+  justify-content: center;
+  margin: 24px 0 16px;
+}
+
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid #d9d9d9;
+  border-radius: 16px;
+  background: #fff;
+  color: #555;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  border-color: #0084ff;
+  color: #0084ff;
+  background: #f0f9ff;
+}
+
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.refresh-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.refresh-icon.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* ========== 商品瀑布流网格 ========== */

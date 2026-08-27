@@ -366,7 +366,8 @@ export const mockErrandTasks = [
 
 // 交易分类数据
 export const mockTradeCategories = [
-  { id: 0, name: '全部', icon: '🏷️' },
+  { id: 0, name: '随机商品', icon: '🎲' },
+  { id: -1, name: '热门商品', icon: '🔥' },
   { id: 1, name: '数码电子', icon: '📱' },
   { id: 2, name: '教材书籍', icon: '📚' },
   { id: 3, name: '服饰鞋包', icon: '👟' },

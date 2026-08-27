@@ -103,7 +103,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import ZhihuHeader from '@/components/ZhihuHeader.vue'
-import { fetchTradeCategories, fetchAddTradeItem, fetchUserInfo } from '@/utils/api'
+import { fetchTradeCategories, fetchAddTradeItem, fetchUserInfo, fetchUpload } from '@/utils/api'
 
 const router = useRouter()
 const userInfo = ref({})
@@ -120,17 +120,29 @@ const form = reactive({
   location: ''
 })
 
-const handleImageUpload = (e) => {
+const handleImageUpload = async (e) => {
   const files = Array.from(e.target.files)
   const remaining = 9 - previewImages.value.length
   const toUpload = files.slice(0, remaining)
-  toUpload.forEach(file => {
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      previewImages.value.push(ev.target.result)
+  for (const file of toUpload) {
+    try {
+      const result = await fetchUpload(file)
+      if (result.data) {
+        // 后端返回阿里云 OSS URL
+        previewImages.value.push(result.data)
+      } else {
+        // 后端不可用，降级到本地预览
+        const reader = new FileReader()
+        reader.onload = (ev) => previewImages.value.push(ev.target.result)
+        reader.readAsDataURL(file)
+      }
+    } catch (err) {
+      // 上传失败，降级到本地预览
+      const reader = new FileReader()
+      reader.onload = (ev) => previewImages.value.push(ev.target.result)
+      reader.readAsDataURL(file)
     }
-    reader.readAsDataURL(file)
-  })
+  }
   e.target.value = ''
 }
 
@@ -145,12 +157,16 @@ const handleSubmit = async () => {
   if (!form.category) return ElMessage.warning('请选择分类')
   if (!form.condition) return ElMessage.warning('请选择成色')
 
+  // 发送格式严格匹配后端 TradDto
   const payload = {
-    ...form,
+    title: form.title,
+    description: form.description,
     price: parseFloat(form.price),
     originalPrice: parseFloat(form.originalPrice) || parseFloat(form.price),
     images: previewImages.value,
-    seller: userInfo.value
+    category: form.category,
+    condition: form.condition,
+    location: form.location
   }
 
   await fetchAddTradeItem(payload)

@@ -382,25 +382,100 @@ export const fetchNotifications = async () => {
 export const fetchRecommendUsers = () => mockUsers
 
 /**
- * 获取二手商品列表
- * 预留接口: GET /admin/trade/item/list
+ * 清洗后端 Jackson 默认类型序列化导致的异常字段格式
+ * ["java.math.BigDecimal", 123] → 123
+ * ["java.util.ArrayList", [...]] → [...]
  */
-export const fetchTradeItemList = async (category) => {
-  const url = category ? `/admin/trade/item/list?category=${category}` : '/admin/trade/item/list'
-  return fetchWithFallback(url, { method: 'GET' }, mockTradeItems)
+const normalizeTradeItem = (item) => {
+  if (!item) return item
+  // price: ["java.math.BigDecimal", 123] → 123
+  if (Array.isArray(item.price) && item.price.length === 2) {
+    item.price = item.price[1]
+  }
+  // originalPrice: ["java.math.BigDecimal", 123] → 123
+  if (Array.isArray(item.originalPrice) && item.originalPrice.length === 2) {
+    item.originalPrice = item.originalPrice[1]
+  }
+  // images: ["java.util.ArrayList", [...]] → [...]
+  if (Array.isArray(item.images) && item.images.length === 2 && Array.isArray(item.images[1])) {
+    item.images = item.images[1]
+  }
+  // 确保 images 至少是数组
+  if (!Array.isArray(item.images)) {
+    item.images = item.images ? [item.images] : []
+  }
+  return item
+}
+
+/**
+ * 获取二手商品列表
+ * 接口: GET /admin/trade/item/list?category={category}&page=1&pageSize=10
+ * 后端返回: { data: { total, page, pageSize, list: [...] } }
+ */
+export const fetchTradeItemList = async (category, page = 1, pageSize = 10) => {
+  const params = new URLSearchParams({ page, pageSize })
+  if (category) params.append('category', category)
+  const url = `/admin/trade/item/list?${params}`
+  const result = await fetchWithFallback(url, { method: 'GET' }, mockTradeItems)
+  // 后端返回分页格式 { total, page, pageSize, list }，提取 list
+  if (result.data && !Array.isArray(result.data) && Array.isArray(result.data.list)) {
+    result.data = result.data.list
+  }
+  // 清洗 Jackson 类型序列化字段
+  if (Array.isArray(result.data)) {
+    result.data = result.data.map(normalizeTradeItem)
+  }
+  return result
+}
+
+/**
+ * 获取随机商品列表
+ * 接口: GET /admin/trade/item/random
+ */
+export const fetchTradeRandomItems = async () => {
+  const result = await fetchWithFallback('/admin/trade/item/random', { method: 'GET' }, mockTradeItems.slice(0, 6))
+  if (result.data && !Array.isArray(result.data) && Array.isArray(result.data.list)) {
+    result.data = result.data.list
+  }
+  if (Array.isArray(result.data)) {
+    result.data = result.data.map(normalizeTradeItem)
+  }
+  return result
+}
+
+/**
+ * 获取热门商品列表
+ * 接口: GET /admin/trade/item/hot
+ */
+export const fetchTradeHotItems = async () => {
+  const result = await fetchWithFallback('/admin/trade/item/hot', { method: 'GET' }, mockTradeItems.slice(0, 6))
+  if (result.data && !Array.isArray(result.data) && Array.isArray(result.data.list)) {
+    result.data = result.data.list
+  }
+  if (Array.isArray(result.data)) {
+    result.data = result.data.map(normalizeTradeItem)
+  }
+  return result
 }
 
 /**
  * 获取商品详情
- * 预留接口: GET /admin/trade/item/{id}
+ * 接口: GET /admin/trade/item/{id}
  */
 export const fetchTradeItemDetail = async (id) => {
-  return fetchWithFallback(`/admin/trade/item/${id}`, { method: 'GET' }, mockTradeItems.find(i => i.id === parseInt(id)))
+  const result = await fetchWithFallback(`/admin/trade/item/${id}`, { method: 'GET' }, mockTradeItems.find(i => i.id === parseInt(id)))
+  // 清洗 Jackson 类型序列化字段
+  if (result.data) {
+    normalizeTradeItem(result.data)
+  }
+  return result
 }
 
 /**
  * 发布二手商品
- * 预留接口: POST /admin/trade/item/add
+ * 接口: POST /admin/trade/item/add
+ * 请求体: TradDto { title, description, price, originalPrice, images, category, condition, location }
+ * sellerId 从 token 获取，前端无需传递
  */
 export const fetchAddTradeItem = async (payload) => {
   return fetchWithFallback('/admin/trade/item/add', {
@@ -411,12 +486,100 @@ export const fetchAddTradeItem = async (payload) => {
 }
 
 /**
- * 获取跑腿任务列表
- * 预留接口: GET /admin/errand/task/list
+ * 删除商品
+ * 接口: DELETE /admin/trade/item/delete/{id}
+ * 只能删除自己发布的商品
+ * 后端操作：删除图片表 → 删除商品 → 清除 Redis 缓存
  */
-export const fetchErrandTaskList = async (category) => {
-  const url = category ? `/admin/errand/task/list?category=${category}` : '/admin/errand/task/list'
-  return fetchWithFallback(url, { method: 'GET' }, mockErrandTasks)
+export const fetchDeleteTradeItem = async (id) => {
+  return fetchWithFallback(`/admin/trade/item/delete/${id}`, {
+    method: 'DELETE'
+  })
+}
+
+/**
+ * 更新商品
+ * 接口: PUT /admin/trade/item/update/{id}
+ * 请求体: TradDto { title, description, price, originalPrice, images, category, condition, location }
+ * 只能更新自己发布的商品
+ */
+export const fetchUpdateTradeItem = async (id, payload) => {
+  return fetchWithFallback(`/admin/trade/item/update/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+}
+
+/**
+ * 创建二手商品订单
+ * 接口: POST /admin/trade/item/order/create
+ * 请求体: { itemId, sellerId, tradeMethod, remark }
+ */
+export const fetchCreateTradeOrder = async (payload) => {
+  return fetchWithFallback('/admin/trade/item/order/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+}
+
+/**
+ * 接单跑腿任务
+ * 接口: POST /admin/errand/task/accept
+ * 请求体: { taskId }
+ */
+export const fetchCreateErrandOrder = async (payload) => {
+  return fetchWithFallback('/admin/errand/task/accept', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+}
+
+/**
+ * 增加商品浏览量
+ * 接口: POST /admin/trade/view
+ * 请求体: { tradeId }
+ * 响应: { views: number }
+ */
+export const fetchTradeView = async (tradeId) => {
+  return fetchWithFallback('/admin/trade/item/view', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tradeId })
+  })
+}
+
+/**
+ * 收藏/取消收藏商品
+ * 接口: POST /admin/trade/collect
+ * 请求体: { tradeId }
+ * 响应: 成功提示字符串
+ */
+export const fetchTradeCollect = async (tradeId) => {
+  return fetchWithFallback('/admin/trade/item/collect', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tradeId })
+  })
+}
+
+/**
+ * 获取跑腿任务列表
+ * 接口: GET /admin/errand/task/list?category={category}&page=1&pageSize=10
+ * 后端返回: { data: { total, page, pageSize, list: [...] } }
+ */
+export const fetchErrandTaskList = async (category, page = 1, pageSize = 10) => {
+  const params = new URLSearchParams({ page, pageSize })
+  if (category) params.append('category', category)
+  const url = `/admin/errand/task/list?${params}`
+  const result = await fetchWithFallback(url, { method: 'GET' }, mockErrandTasks)
+  // 后端返回分页格式 { total, page, pageSize, list }，提取 list
+  if (result.data && !Array.isArray(result.data) && Array.isArray(result.data.list)) {
+    result.data = result.data.list
+  }
+  return result
 }
 
 /**
